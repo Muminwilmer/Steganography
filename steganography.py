@@ -170,17 +170,17 @@ def main():
     
     mode = int(input("Add Text / Extract Text (1 / 0): ").strip())
 
-    file_name = input("🖼️  Enter the image name:")
+    file_name = input("(🖼️) Enter the image name: ")
     image = open_image(file_name)
     image_disk_size = os.path.getsize(file_name)
 
-    password = input("🔐 Enter the password or leave blank: ")
+    password = input("(🔐) Enter the password or leave blank: ")
     
     print("\nThe text will always begin in the corner of an image, add an offset if you don't want this")
-    offset = input("🔀 Text Offset (default 0) (BYTES): ")
+    offset = input("(🔀) Text Offset (default 0) (BYTES): ")
     offset = int(offset.strip() or 0) * 8
 
-    text_density = input("📦 Amount of text bits per image byte (default: 1) (max: 8): ")
+    text_density = input("(📦) Amount of text bits per image byte (default: 1) (max: 8): ")
     text_density = int(text_density.strip() or 1)
     text_density = min(max(text_density, 1), 8)
 
@@ -188,59 +188,60 @@ def main():
     usable_chars = usable_bits // 8  # Since each ASCII character takes 8 bits
 
     # Displaying the info with the text_density impact
-    print(f"📐 Image Size  : {image.size}")
-    print(f"💾 Image Disk  : {image_disk_size} bytes")
-    print(f"💿 Raw Capacity: {usable_chars} bytes ({usable_bits} bits)")
-    print(f"📝 You can hide: ~{usable_chars-32-offset} ASCII characters (unencrypted) at {text_density} bits per byte and offset of {offset}. \n")
-
+    print("-------------------------")
+    print(f"(📐) Image Size  : {image.size}")
+    print(f"(💾) Image Disk  : {image_disk_size} bytes")
+    print(f"(💿) Raw Capacity: {usable_chars} bytes ({usable_bits} bits)")
+    print(f"(📝) You can hide: ~{usable_chars-32-offset} ASCII characters (unencrypted) at {text_density} bits per byte and offset of {offset}. \n")
+    print("-------------------------")
     if mode == 1:
-        random_fill = input("🗑️  Fill with random garbage? (y/n):").strip().lower() == 'y'
+        random_fill = input("(🗑️) Fill with random garbage? (y/n): ").strip().lower() == 'y'
         if random_fill:
             hidden_text = generate_random_garbage(usable_chars-32-offset)
-            print("🔃 Filling with random garbage...")
+            print("(🔃) Filling with random garbage...")
         else:
             hidden_text = input("Enter the Hidden text you want to embed: ")
             if hidden_text.endswith(".txt"):
-                print("Reading text file...")
+                print("(👀) Reading text file...")
                 with open(hidden_text, "r", encoding="utf-8") as file:
                     hidden_text = file.read()
                     print(len(hidden_text))
         output_path = input(f"Output location (./steg_{file_name}): ").strip() or f"./steg_{file_name}"
 
         if password:
-            print("🔃 Encrypts text..")
+            print("(🔃) Encrypts text..")
             hidden_text = encrypt_text(password, hidden_text)
-            print(f"✅ Text encrypted: {hidden_text}\n")
+            print(f"(✅) Text encrypted: {hidden_text}\n")
 
-        print("🔃 Adding hidden text to image...")
+        print("(🔃) Adding hidden text to image...")
         new_image_bits = fill_with_text(image, hidden_text, offset, text_density)
-        print("✅ Text added!\n")
+        print("(✅) Text added!\n")
 
-        print("🔃 Putting the image back together..")
+        print("(🔃) Putting the image back together..")
         new_pixels = bytes_to_pixels(bits_to_bytes(new_image_bits))
         save_image(new_pixels, image.size, output_path)
-        print("✅ Complete!\n")
+        print("(✅) Complete!\n")
     else:
-        print("🔃 Extracting text from the image")
+        print("(🔃) Extracting text from the image")
         extracted_text = extract_text_from_image(image, offset, text_density)
-        print("✅ Text extracted!\n")
+        print("(✅) Text extracted!\n")
 
         if password:
             try:
-                print("🔃 Decrypting Text")
+                print("(🔃) Decrypting Text")
                 extracted_text = decrypt_text(password, extracted_text)
-                print("✅ Decrypted!\n")
+                print("(✅) Decrypted!\n")
             except Exception as e:
-                print("❌ Incorrect password or data is corrupt.")
+                print("(❌) Incorrect password or data is corrupt.")
                 return
         else:
-            print("⚠️ No password entered!\n")
-        response = input("🔽 Do you want to save the output to a file? (y/n) [y]: ").strip().lower() or "y"
+            print("(⚠️) No password entered!\n")
+        response = input("(🔽) Do you want to save the output to a file? (y/n) [y]: ").strip().lower() or "y"
         if response == "y":
             with open(file_name+".txt", "w", encoding="utf-8") as file:
                 file.write(extracted_text)
         else:
-            print("✅ Extracted Text:", extracted_text)
+            print("(✅) Extracted Text:", extracted_text)
 
 
 if __name__=="__main__":
