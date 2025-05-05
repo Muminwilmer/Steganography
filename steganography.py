@@ -58,109 +58,33 @@ def generate_random_garbage(length):
 
 
 def open_image(image_path):
-    """
-    Opens an image from the provided file path, converts it to RGB mode if necessary.
-    
-    Parameters:
-    image_path (str): Path to the image file.
-
-    Returns:
-    Image: The opened image object in RGB mode.
-    """
-    img = Image.open(image_path)
-    if img.mode != 'RGB':
-        img = img.convert('RGB')  # Ensure the image is in RGB mode
+    img = Image.open(image_path).convert('RGB')
     return img
 
 def extract_image_bytes(img):
-    """
-    Extracts the raw byte data from an image by converting the pixels into byte format.
-    
-    Parameters:
-    img (Image): The image object to extract bytes from.
-
-    Returns:
-    list: The byte data extracted from the image pixels.
-    """
     pixels = list(img.getdata())  # Extract pixel data
     flat_bytes = pixels_to_bytes(pixels)  # Convert pixels to bytes
     return flat_bytes
 
 def save_image(pixels, size, output_path):
-    """
-    Saves the image after modifying the pixels.
-    
-    Parameters:
-    pixels (list): List of modified pixel values.
-    size (tuple): Size of the image (width, height).
-    output_path (str): The path to save the modified image.
-    """
     img = Image.new("RGB", size)
     img.putdata(pixels)
-    img.save(output_path)  # Save the image at the specified path
+    img.save(output_path)
     print(f"Saved image to {output_path}")
 
 def pixels_to_bytes(pixels):
-    """
-    Converts a list of pixels to a flat list of bytes (RGB channels).
-    
-    Parameters:
-    pixels (list): List of pixel tuples (R, G, B).
-
-    Returns:
-    list: Flattened list of byte values from the pixels.
-    """
     return [channel for pixel in pixels for channel in pixel]
 
 def bytes_to_pixels(byte_list):
-    """
-    Converts a list of bytes back into a list of pixel tuples (R, G, B).
-    
-    Parameters:
-    byte_list (list): List of byte values representing pixel data.
-
-    Returns:
-    list: List of pixel tuples.
-    """
     return [tuple(byte_list[i:i+3]) for i in range(0, len(byte_list), 3)]
 
 def bytes_to_bits(byte_list):
-    """
-    Converts a list of bytes to a list of bits.
-    
-    Parameters:
-    byte_list (list): List of byte values.
-
-    Returns:
-    list: List of bits representing the bytes.
-    """
     return [int(bit) for byte in byte_list for bit in format(byte, '08b')]
 
 def bits_to_bytes(bits):
-    """
-    Converts a list of bits to a list of bytes.
-    
-    Parameters:
-    bits (list): List of bits.
-
-    Returns:
-    list: List of bytes obtained from the bits.
-    """
     return [int(''.join(map(str, bits[i:i+8])), 2) for i in range(0, len(bits), 8)]
 
 def fill_with_text(img, text, offset=0, text_density=1):
-    """
-    Embeds a given text into the image's pixel data by altering the least significant bits.
-    
-    Parameters:
-    img (Image): The image to embed the text in.
-    text (str): The text to embed.
-    offset (int): The starting position in the image to start embedding.
-    text_density (int): The number of bits per byte to use for embedding text.
-
-    Returns:
-    list: The modified image bits with the embedded text.
-    """
     image_bytes = extract_image_bytes(img)
     image_bits = bytes_to_bits(image_bytes)  # Convert image bytes to bits
 
@@ -171,16 +95,17 @@ def fill_with_text(img, text, offset=0, text_density=1):
     total_bits_needed = len(length_bits) + len(text_bits)
     start = int(offset)
     available_bits = (len(image_bits) // 8) * text_density
-    print(available_bits)
+    
+    print(f"Message size: {total_bits_needed}")
+    print(f"Extra offset: {start}")
+    print(f"Useable space: {available_bits}")
+    
     # Ensure there is enough space in the image for the message
     if (start + total_bits_needed) > available_bits:
-        print(f"Message size: {total_bits_needed}")
-        print(f"Extra offset: {start}")
-        print(f"Useable space: {available_bits}")
-        print("❌ Message is too large to hide in the image!")
         raise ValueError("Message is too large to hide in the image!")
 
-    for i in range(0, 32, text_density):
+    # Embed message length
+    for i in tqdm(range(0, 32, text_density), desc="📝 Embedding length", unit="bits"):
         byte_index = start + i // text_density
         for j in range(text_density):
             if i + j >= 32:
@@ -190,7 +115,7 @@ def fill_with_text(img, text, offset=0, text_density=1):
             image_bits[bit_pos] = bit
 
     # Embed message
-    for i in range(0, len(text_bits), text_density):
+    for i in tqdm(range(0, len(text_bits), text_density), desc="📝 Embedding text", unit="bits"):
         byte_index = start + 32 // text_density + i // text_density
         for j in range(text_density):
             if i + j >= len(text_bits):
@@ -202,23 +127,13 @@ def fill_with_text(img, text, offset=0, text_density=1):
     return image_bits
 
 def extract_text_from_image(img, offset=0, text_density=1):
-    """
-    Extracts hidden text from an image by reading the least significant bits.
-    
-    Parameters:
-    img (Image): The image from which to extract the text.
-    offset (int): The starting position to begin extraction.
-
-    Returns:
-    str: The extracted hidden text.
-    """
     flat_bytes = extract_image_bytes(img)
     image_bits = bytes_to_bits(flat_bytes)
     start = int(offset)
 
     length_bits = []
     
-    for i in range(0, 32, text_density):
+    for i in tqdm(range(0, 32, text_density), desc="📝 Extracting length", unit="bits"):
         byte_index = start + (i // text_density)
 
         for bit_offset in range(text_density):
@@ -251,18 +166,16 @@ def extract_text_from_image(img, offset=0, text_density=1):
 
 
 def main():
-    """
-    Main function for interacting with the user and performing steganography.
-    Allows users to either add hidden text to an image or extract hidden text from an image.
-    """
     print("Mumin's Steganography tool!\n")
-    mode = int(input("Add Text / Extract Text (1 / 0): "))
+    
+    mode = int(input("Add Text / Extract Text (1 / 0): ").strip())
 
     file_name = input("🖼️  Enter the image name:")
     image = open_image(file_name)
     image_disk_size = os.path.getsize(file_name)
 
     password = input("🔐 Enter the password or leave blank: ")
+    
     print("\nThe text will always begin in the corner of an image, add an offset if you don't want this")
     offset = input("🔀 Text Offset (default 0) (BYTES): ")
     offset = int(offset.strip() or 0) * 8
@@ -281,7 +194,7 @@ def main():
     print(f"📝 You can hide: ~{usable_chars-32-offset} ASCII characters (unencrypted) at {text_density} bits per byte and offset of {offset}. \n")
 
     if mode == 1:
-        random_fill = input("🗑️  Fill with random garbage? (yes/no):").strip().lower() == 'yes'
+        random_fill = input("🗑️  Fill with random garbage? (y/n):").strip().lower() == 'y'
         if random_fill:
             hidden_text = generate_random_garbage(usable_chars-32-offset)
             print("🔃 Filling with random garbage...")
@@ -292,7 +205,7 @@ def main():
                 with open(hidden_text, "r", encoding="utf-8") as file:
                     hidden_text = file.read()
                     print(len(hidden_text))
-        output_path = input("Output location (./): ").strip() or f"./s-{file_name}"
+        output_path = input(f"Output location (./steg_{file_name}): ").strip() or f"./steg_{file_name}"
 
         if password:
             print("🔃 Encrypts text..")
@@ -322,7 +235,8 @@ def main():
                 return
         else:
             print("⚠️ No password entered!\n")
-        if int(input("Do you want to save the output to a file? (1 / 0): ") or 1) == 1:
+        response = input("🔽 Do you want to save the output to a file? (y/n) [y]: ").strip().lower() or "y"
+        if response == "y":
             with open(file_name+".txt", "w", encoding="utf-8") as file:
                 file.write(extracted_text)
         else:
