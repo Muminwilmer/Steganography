@@ -56,7 +56,6 @@ def decrypt_text(password: str, encrypted_payload: str) -> str:
 def generate_random_garbage(length):
     return ''.join(random.choices(string.ascii_letters + string.digits + string.punctuation + " \n\t", k=length))
 
-
 def open_image(image_path):
     img = Image.open(image_path).convert('RGB')
     return img
@@ -87,7 +86,7 @@ def bits_to_bytes(bits):
 def fill_with_text(img, text, offset=0, text_density=1):
     image_bytes = extract_image_bytes(img)
     image_bits = bytes_to_bits(image_bytes)  # Convert image bytes to bits
-
+    
     text_bytes = text.encode('utf-8')
     text_bits = bytes_to_bits(text_bytes)  # Convert text to bits
     length_bits = bytes_to_bits(len(text_bytes).to_bytes(4, byteorder='big'))  # Convert text length to bits
@@ -180,14 +179,13 @@ def main():
     offset = input("(🔀) Text Offset (default 0) (BYTES): ")
     offset = int(offset.strip() or 0) * 8
 
-    text_density = input("(📦) Amount of text bits per image byte (default: 1) (max: 8): ")
+    text_density = input("(📦) Density of hidden text in image (t:bits per i:byte) (default: 1) (max: 8): ")
     text_density = int(text_density.strip() or 1)
     text_density = min(max(text_density, 1), 8)
 
     usable_bits = image.size[0] * image.size[1] * 3 * text_density
-    usable_chars = usable_bits // 8  # Since each ASCII character takes 8 bits
+    usable_chars = usable_bits // 8
 
-    # Displaying the info with the text_density impact
     print("-------------------------")
     print(f"(📐) Image Size  : {image.size}")
     print(f"(💾) Image Disk  : {image_disk_size} bytes")
@@ -195,17 +193,22 @@ def main():
     print(f"(📝) You can hide: ~{usable_chars-32-offset} ASCII characters (unencrypted) at {text_density} bits per byte and offset of {offset}. \n")
     print("-------------------------")
     if mode == 1:
-        random_fill = input("(🗑️) Fill with random garbage? (y/n): ").strip().lower() == 'y'
+        if password == "":
+            random_fill = input("(🗑️) Fill with random garbage? (y/n): ").strip().lower() == 'y'
+        else:
+            random_fill = False
+
         if random_fill:
             hidden_text = generate_random_garbage(usable_chars-32-offset)
             print("(🔃) Filling with random garbage...")
         else:
-            hidden_text = input("Enter the Hidden text you want to embed: ")
+            hidden_text = input("Enter the Hidden text you want to embed (ends with .txt for file): ")
             if hidden_text.endswith(".txt"):
                 print("(👀) Reading text file...")
                 with open(hidden_text, "r", encoding="utf-8") as file:
                     hidden_text = file.read()
                     print(len(hidden_text))
+
         output_path = input(f"Output location (./steg_{file_name}): ").strip() or f"./steg_{file_name}"
 
         if password:
