@@ -1,11 +1,15 @@
 from PIL import Image
-from stego_core import StegoCore
+from steg_core import StegCore
 from encryption import Encryption
 import os
 
-def prompt_bool(prompt: str, default=True) -> bool:
-    choice = input(f"{prompt} ({'Y/n' if default else 'y/N'}): ").strip().lower()
-    return choice == "" and default or choice == "y"
+def prompt_bool(prompt: str, default=True, truthy="y", falsy="n") -> bool:
+    truthy = truthy.lower()
+    falsy = falsy.lower()
+    default_str = f"{truthy.upper()}/{falsy}" if default else f"{truthy}/{falsy.upper()}"
+    
+    choice = input(f"{prompt} ({default_str}): ").strip().lower()
+    return choice == "" and default or choice == truthy
 
 def display_intro():
     print("\n[ Mumin's Steganography Tool ]")
@@ -16,7 +20,7 @@ def display_intro():
     print("  - Text encryption (bit seed uses main password)")
     print("-" * 50)
 
-def get_image_info(core: StegoCore):
+def get_image_info(core: StegCore):
     print("\n📊 Image Information")
     print(f"(📐) Size         : {core.image.size}")
     print(f"(💿) Raw Capacity : {core.image.size[0] * core.image.size[1] * 3} bits")
@@ -30,7 +34,7 @@ def get_passwords(paranoia: bool) -> tuple[str, str]:
         pin = password
     return password, pin
 
-def encrypt_flow(core: StegoCore, password: str, bit_seed: int):
+def encrypt_flow(core: StegCore, password: str, bit_seed: int):
     print("\n[ Encrypt Mode ]")
     print("\nWriting more text using multiple passwords may corrupt hidden secrets!\n")
     use_file = prompt_bool("Embed a file instead of plain text?", default=False)
@@ -49,7 +53,7 @@ def encrypt_flow(core: StegoCore, password: str, bit_seed: int):
     output_path = input("Enter output image path (e.g., out.png): ") or "out.png"
     core.save_image(output_path)
 
-def decrypt_flow(core: StegoCore, password: str, bit_seed: int):
+def decrypt_flow(core: StegCore, password: str, bit_seed: int):
     print("\n[ Decrypt Mode ]")
     decrypted_text = Encryption.decrypt_text(password, core.extract_text_from_image(bit_seed))
 
@@ -61,12 +65,15 @@ def decrypt_flow(core: StegoCore, password: str, bit_seed: int):
     else:
         print("(✅) Extracted Text:\n", decrypted_text)
 
-def obfuscate_flow(core: StegoCore, password: str, bit_seed: int):
+def obfuscate_flow(core: StegCore, password: str, bit_seed: int):
     print("\n[ Obfuscate Mode ]")
+    encrypted_len = len(core.extract_text_from_image(bit_seed))
 
     # use obfuscator.py to generate random letters and numbers
     # encrypt them to make it look real
     # add them using real seed and adding everywhere there's not stuff already
+
+
     
 
 def main():
@@ -79,11 +86,34 @@ def main():
         return
 
     image = Image.open(image_path)
-    core = StegoCore(image)
+    core = StegCore(image)
     get_image_info(core)
-
+    print("\n")
     password, location_pin = get_passwords(paranoia_mode)
+
+    if password == "":
+        print("(⚠️) NO PASSWORD ENTERED!!!")
+        print("• Bit seed and text will be predictable!")
+        print("• You're relying entirely on obscurity — no real encryption.")
+        print("• Text will appear encrypted due to a hash salting. But it's as secure as putting a broken lock over your door.")
+        
+        if not prompt_bool("(⚠️) Continue anyway? NOT RECOMMENDED", default=False):
+            exit()
+
     bit_seed = Encryption.derive_bit_seed(location_pin)
+    if bit_seed == "":
+        print("(⚠️) Bit location seed failed to generate!")
+        
+        if prompt_bool("Would you like to create one yourself? Or don't hide bit positions?", default=True):
+            user_input = input("(🔒) Bit-loc pass: ")
+            bit_seed = Encryption.derive_bit_seed(user_input)
+            if bit_seed == "":
+                exit()
+        else:
+            print("(⚠️) Your secret will be placed left-to-right across the image in a predictable pattern.")
+            if password == "":
+                print("(🔓) With no password and no bit seed, this will be easy to detect.")
+            bit_seed = 0  # Don't shuffle the list
 
     mode = input("Choose mode - Encrypt (E) / Decrypt (D) / Obfuscate (O): ").strip().lower()
     if mode.startswith("e"):
