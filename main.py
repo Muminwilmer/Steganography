@@ -1,15 +1,12 @@
 from PIL import Image
+
 from steg_core import StegCore
 from encryption import Encryption
+from tools import Tools
+from user_input import Prompt
 import os
 
-def prompt_bool(prompt: str, default=True, truthy="y", falsy="n") -> bool:
-    truthy = truthy.lower()
-    falsy = falsy.lower()
-    default_str = f"{truthy.upper()}/{falsy}" if default else f"{truthy}/{falsy.upper()}"
-    
-    choice = input(f"{prompt} ({default_str}): ").strip().lower()
-    return choice == "" and default or choice == truthy
+
 
 def display_intro():
     print("\n[ Mumin's Steganography Tool ]")
@@ -26,44 +23,78 @@ def get_image_info(core: StegCore):
     print(f"(💿) Raw Capacity : {core.image.size[0] * core.image.size[1] * 3} bits")
     print(f"(📝) Text Capacity: ~{core.image.size[0] * core.image.size[1] * 3 // 8 - 4} characters\n")
 
-def get_passwords(paranoia: bool) -> tuple[str, str]:
-    password = input("Enter your encryption password: ")
-    if paranoia:
-        pin = input("Enter a separate password for bit locations (long + strong): ")
-    else:
-        pin = password
-    return password, pin
-
 def encrypt_flow(core: StegCore, password: str, bit_seed: int):
     print("\n[ Encrypt Mode ]")
     print("\nWriting more text using multiple passwords may corrupt hidden secrets!\n")
-    use_file = prompt_bool("Embed a file instead of plain text?", default=False)
+    while True:
+        use_file = Prompt.bool("Embed a file instead of plain text?", default=True)
 
-    if use_file:
-        file_path = input("Enter path to the file to embed: ").strip()
-        with open(file_path, "r", encoding="utf-8") as f:
-            plaintext = f.read()
-    else:
-        plaintext = input("Enter your secret message: ")
+        if use_file:
+            file_path = input("Enter path to the file to embed: ").strip()
+            raw_data = Tools.read_file(file_path)
+            if not raw_data:
+                print("File doesn't exist or path is wrong. Remember to add filetype")
+                continue
 
-    encrypted_text = Encryption.encrypt_text(password, plaintext)
-    print(f"🔐 Text encrypted. Preview: {encrypted_text[:30]}...")
+            file_ext = Tools.extract_extension(file_path)
 
-    core.fill_with_text(encrypted_text, bit_seed)
-    output_path = input("Enter output image path (e.g., out.png): ") or "out.png"
+            if file_ext.count(".") > 0:
+                print("Multiple Extensions found! This is correct in some cases")
+                print(f"Found: {file_ext[0]}")
+                print("✅: [tar.gz]")
+                print("❌: pdf.[png]")
+                print("Make sure the extension is correct.")
+                Prompt.string("Please re-type the extension name if wrong.", file_ext)
+                if file_ext.startswith("."):
+                    file_ext = file_ext[1:]
+
+            if file_ext == "": 
+                print("File extension is empty.")
+                file_ext = "None"
+
+            break
+        else:
+            raw_data = input("Enter your secret message: ").encode()
+            file_ext = "txt"
+            break
+
+    
+
+    payload = StegCore.build_payload(raw_data, file_ext, password)
+    print(f"🔐 Payload encrypted. Preview: {payload[:30]}...")
+
+    core.fill_with_data(payload, bit_seed)
+    output_path = Prompt.string("Enter output image path", "out.png")
     core.save_image(output_path)
 
 def decrypt_flow(core: StegCore, password: str, bit_seed: int):
     print("\n[ Decrypt Mode ]")
-    decrypted_text = Encryption.decrypt_text(password, core.extract_text_from_image(bit_seed))
+    extracted_payload = core.extract_data_from_image(bit_seed, password)
+    print("Decrypting payload")
+    decrypted_payload = Encryption.decrypt_bytes(password, extracted_payload)
 
-    if prompt_bool("Save the output to a file?", default=True):
-        output_path = input("Where should the file be saved (e.g., ./output.txt): ") or "output.txt"
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(decrypted_text)
-        print(f"(✅) Saved extracted text to {output_path}")
-    else:
-        print("(✅) Extracted Text:\n", decrypted_text)
+    print("Parsing payload")
+    file_ext, file_data = StegCore.parse_payload(decrypted_payload)
+
+
+    save_file = True
+    show_output = False
+
+    if file_ext == "txt" or file_ext == "None":
+        save_file = Prompt.bool("Save the output to a file?", default=True)
+        if not save_file:
+            show_output = True
+
+    if save_file:
+        file_ext = file_ext if not file_ext == "None" else ""
+        output_path = Prompt.string("Where should the file be saved?", f"output.{file_ext}")
+        with open(output_path, "wb") as f:
+            f.write(file_data)
+        print(f"(✅) Saved extracted output to {output_path}")
+
+    if show_output:
+        print("(✅) Extracted Text:\n", file_data)
+
 
 def obfuscate_flow(core: StegCore, password: str, bit_seed: int):
     print("\n[ Obfuscate Mode ]")
@@ -78,7 +109,7 @@ def obfuscate_flow(core: StegCore, password: str, bit_seed: int):
 
 def main():
     display_intro()
-    paranoia_mode = prompt_bool("Enable Paranoia mode (separate passwords)?", default=False)
+    paranoia_mode = Prompt.bool("Enable Paranoia mode (separate passwords)?", default=False)
 
     image_path = input("Enter image filename (with extension): ").strip()
     if not os.path.exists(image_path):
@@ -89,31 +120,17 @@ def main():
     core = StegCore(image)
     get_image_info(core)
     print("\n")
-    password, location_pin = get_passwords(paranoia_mode)
 
-    if password == "":
-        print("(⚠️) NO PASSWORD ENTERED!!!")
-        print("• Bit seed and text will be predictable!")
-        print("• You're relying entirely on obscurity — no real encryption.")
-        print("• Text will appear encrypted due to a hash salting. But it's as secure as putting a broken lock over your door.")
-        
-        if not prompt_bool("(⚠️) Continue anyway? NOT RECOMMENDED", default=False):
-            exit()
+    password = Prompt.password("Enter your encryption password: ")
+    if paranoia_mode:
+        location_pin = Prompt.password("Enter a separate password for bit locations: ")
+    else:
+        location_pin = password
 
     bit_seed = Encryption.derive_bit_seed(location_pin)
     if bit_seed == "":
-        print("(⚠️) Bit location seed failed to generate!")
-        
-        if prompt_bool("Would you like to create one yourself? Or don't hide bit positions?", default=True):
-            user_input = input("(🔒) Bit-loc pass: ")
-            bit_seed = Encryption.derive_bit_seed(user_input)
-            if bit_seed == "":
-                exit()
-        else:
-            print("(⚠️) Your secret will be placed left-to-right across the image in a predictable pattern.")
-            if password == "":
-                print("(🔓) With no password and no bit seed, this will be easy to detect.")
-            bit_seed = 0  # Don't shuffle the list
+        print('Bit seed is empty, Secrets will be "hidden" left-to-right along the image.')
+
 
     mode = input("Choose mode - Encrypt (E) / Decrypt (D) / Obfuscate (O): ").strip().lower()
     if mode.startswith("e"):

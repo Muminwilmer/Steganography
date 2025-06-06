@@ -3,15 +3,18 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.backends import default_backend
 import os
 import hashlib
-import base64
 
 class Encryption:
     @staticmethod
-    def derive_bit_seed(source: str) -> int:
-        return int.from_bytes(hashlib.sha256(source.encode()).digest(), 'big')
-
+    def derive_bit_seed(source: bytes) -> int:  
+        return int.from_bytes(hashlib.sha256(source).digest(), 'big')
+    
     @staticmethod
-    def get_bit_seed(password: str, paranoia_mode: bool = False, location_pin: str = None) -> int:
+    def get_checksum(source: bytes) -> int:
+        return hashlib.sha256(source).digest()
+    
+    @staticmethod
+    def get_bit_seed(password: bytes, paranoia_mode: bool = False, location_pin: str = None) -> int:
         if paranoia_mode:
             if not location_pin:
                 raise ValueError("Location PIN required in paranoia mode")
@@ -20,28 +23,24 @@ class Encryption:
             return Encryption.derive_bit_seed(password)
     
     @staticmethod
-    def get_kdf_key(password: str, salt: bytes) -> bytes:
+    def get_kdf_key(password: bytes, salt: bytes) -> bytes:
         kdf = Scrypt(salt=salt, length=32, n=2**14, r=8, p=1, backend=default_backend())
-        return kdf.derive(password.encode())
-
+        return kdf.derive(password)
 
     @staticmethod
-    def encrypt_text(password: str, plaintext: str) -> str:
+    def encrypt_bytes(password: bytes, data: bytes) -> bytes:
         salt = os.urandom(16)
         key = Encryption.get_kdf_key(password, salt)
         aesgcm = AESGCM(key)
         nonce = os.urandom(12)
-        ciphertext = aesgcm.encrypt(nonce, plaintext.encode(), None)
-        payload = base64.b64encode(salt + nonce + ciphertext).decode()
-        return payload
+        ciphertext = aesgcm.encrypt(nonce, data, None)
+        return salt + nonce + ciphertext # returns in binary
 
     @staticmethod
-    def decrypt_text(password: str, encrypted_payload: str) -> str:
-        data = base64.b64decode(encrypted_payload)
-        salt = data[:16]
-        nonce = data[16:28]
-        ciphertext = data[28:]
+    def decrypt_bytes(password: bytes, encrypted_data: bytes) -> bytes:
+        salt = encrypted_data[:16]
+        nonce = encrypted_data[16:28]
+        ciphertext = encrypted_data[28:]
         key = Encryption.get_kdf_key(password, salt)
         aesgcm = AESGCM(key)
-        plaintext = aesgcm.decrypt(nonce, ciphertext, None)
-        return plaintext.decode()
+        return aesgcm.decrypt(nonce, ciphertext, None)
