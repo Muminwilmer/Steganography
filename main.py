@@ -102,24 +102,34 @@ def decrypt_flow(core: StegCore, password: bytes, bit_seed: bytes):
     files = parser.parse()  
 
     for i, (data, ext) in enumerate(files):
+        print("\n" + "-"*40)
         print(f"\nFile {i+1}: Extension: {ext}, Size: {len(data)} bytes")
+
         save_file = True
         show_output = False
 
-        if ext == '.txt' or ext == '':
-            save_file = Prompt.bool("Save the output to a file?", default=True)
+        if ext == '.None':
+            ext = ""
+
+        if ext == '.txt':
+            save_file = Prompt.bool("Save the output to a file? or print it", default=True)
             if not save_file:
                 show_output = True
 
         if save_file:
             out_name = Prompt.string("Where should the file be saved?", f"output_{i}{ext}")
-            with open(out_name, "wb") as f:
-                f.write(data)
-            print(f"(✅) Saved extracted output to {out_name}")
+            try:
+                with open(out_name, "wb") as f:
+                    f.write(data)
+                print(f"(✅) Saved extracted output to {out_name}")
+            except Exception as e:
+                print(f"(❌) Failed to save file: {e}")
+
 
         if show_output:
             try:
-                print("(✅) Extracted Text:\n", data.decode('utf-8'))
+                text = data.decode('utf-8')
+                print("(✅) Extracted Text:\n", text)
             except Exception as e:
                 print("Could not decode text:", e)
 

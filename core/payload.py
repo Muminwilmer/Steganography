@@ -1,11 +1,10 @@
-import struct
 from core.crypto import Encryption
 
 class PayloadBuilder:
     def __init__(self):
         self.files: list[tuple[bytes, str]] = []
 
-    def add_file(self, data: bytes, ext: str):
+    def add_file(self, data: bytes, ext: str) -> None:
         if not ext.startswith('.'):
             ext = '.' + ext
         self.files.append((data, ext))
@@ -13,7 +12,6 @@ class PayloadBuilder:
     def build(self) -> bytes:
         out = bytearray()
         count = len(self.files)
-        print(f"Building payload with {count} files.")
         if count > 255:
             raise ValueError("Too many files (max 255)")
 
@@ -24,7 +22,7 @@ class PayloadBuilder:
             if len(ext_bytes) > 255:
                 raise ValueError("Extension too long (max 255 bytes)")
             print(ext)
-            out += struct.pack(">I", len(data))      # 4 bytes: data length
+            out += len(data).to_bytes(4, "big")      # 4 bytes: data length
             out += data                              # variable: file data
             out.append(len(ext_bytes))               # 1 byte: ext length
             out += ext_bytes                         # variable: ext string
@@ -37,34 +35,34 @@ class PayloadParser:
         self.payload = payload
         self.index = 0
 
+    def _read_bytes(self, length: int) -> bytes:
+            if self.index + length > len(self.payload):
+                raise ValueError("Malformed payload (unexpected end)")
+            data = self.payload[self.index:self.index + length]
+            self.index += length
+            return data
+    
     def parse(self) -> list[tuple[bytes, str]]:
         if len(self.payload) < 1:
             raise ValueError("Payload too short")
 
-        count = self.payload[self.index]
-        self.index += 1
-
+        count = self._read_bytes(1)[0]  # Number of files
         results = []
+
         for _ in range(count):
-            if self.index + 4 > len(self.payload):
-                raise ValueError("Malformed payload (data length)")
-            data_len = struct.unpack(">I", self.payload[self.index:self.index + 4])[0]
-            self.index += 4
+            # Read 4 bytes for data length
+            data_len_bytes = self._read_bytes(4)
+            data_len = int.from_bytes(data_len_bytes, 'big')
 
-            if self.index + data_len > len(self.payload):
-                raise ValueError("Malformed payload (file data)")
-            data = self.payload[self.index:self.index + data_len]
-            self.index += data_len
+            # Read the file data
+            data = self._read_bytes(data_len)
 
-            if self.index >= len(self.payload):
-                raise ValueError("Malformed payload (ext length)")
-            ext_len = self.payload[self.index]
-            self.index += 1
+            # Read 1 byte for extension length
+            ext_len = self._read_bytes(1)[0]
 
-            if self.index + ext_len > len(self.payload):
-                raise ValueError("Malformed payload (ext data)")
-            ext = self.payload[self.index:self.index + ext_len].decode('utf-8')
-            self.index += ext_len
+            # Read the extension string
+            ext_bytes = self._read_bytes(ext_len)
+            ext = ext_bytes.decode('utf-8')
 
             results.append((data, ext))
 
