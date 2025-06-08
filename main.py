@@ -1,9 +1,12 @@
 from PIL import Image
 
-from steg_core import StegCore
-from encryption import Encryption
-from tools import Tools
-from user_input import Prompt
+from core.stego import StegCore
+from core.crypto import Encryption
+from core.payload import PayloadBuilder, PayloadParser, PayloadCrypto
+
+from utils.tools import Tools
+from utils.prompt import Prompt
+
 import os
 
 
@@ -19,13 +22,13 @@ def display_intro():
 
 def get_image_info(core: StegCore):
     print("\n📊 Image Information")
-    print(f"(📐) Size         : {core.image.size}")
-    print(f"(💿) Raw Capacity : {core.image.size[0] * core.image.size[1] * 3} bits")
-    print(f"(📝) Text Capacity: ~{core.image.size[0] * core.image.size[1] * 3 // 8 - 4} characters\n")
+    print(f"(📐) Size            : {core.image.size}")
+    print(f"(📝) Payload Capacity: ~{core.max_payload_size()} bytes\n")
+    print(f"(💡) This can be increased with lsb per byte at the cost of detectability")
 
-def encrypt_flow(core: StegCore, password: str, bit_seed: int):
+def encrypt_flow(core: StegCore, password: bytes, bit_seed: bytes):
     print("\n[ Encrypt Mode ]")
-    print("\nWriting more text using multiple passwords may corrupt hidden secrets!\n")
+    pb = PayloadBuilder()
     while True:
         use_file = Prompt.bool("Embed a file instead of plain text?", default=True)
 
@@ -37,66 +40,91 @@ def encrypt_flow(core: StegCore, password: str, bit_seed: int):
                 continue
 
             file_ext = Tools.extract_extension(file_path)
-
-            if file_ext.count(".") > 0:
+            if file_ext.count('.') > 1:
                 print("Multiple Extensions found! This is correct in some cases")
-                print(f"Found: {file_ext[0]}")
-                print("✅: [tar.gz]")
-                print("❌: pdf.[png]")
-                print("Make sure the extension is correct.")
-                Prompt.string("Please re-type the extension name if wrong.", file_ext)
-                if file_ext.startswith("."):
-                    file_ext = file_ext[1:]
+                print(f"Found: {file_ext}")
+                print("✅: file[.tar.gz]")
+                print("❌: file[.homework.png]")
+                file_ext = Prompt.string("Please re-type the extension name if wrong.", file_ext)
 
-            if file_ext == "": 
+            if file_ext == "":
                 print("File extension is empty.")
-                file_ext = "None"
+                file_ext = ".None"  # Lets hope no one uses the .none filetype
 
+            pb.add_file(raw_data, file_ext)
+            if Prompt.bool("Do you want to add more files, might break idk [BETA]", False):
+                continue
+            
             break
+
         else:
-            raw_data = input("Enter your secret message: ").encode()
-            file_ext = "txt"
+            text_data = input("Enter your secret message: ").encode('utf-8')
+            pb.add_file(text_data, '.txt')
             break
 
-    
+    payload = pb.build()
+    payloadlen = len(payload)
+    maxlen = core.max_payload_size()
 
-    payload = StegCore.build_payload(raw_data, file_ext, password)
-    print(f"🔐 Payload encrypted. Preview: {payload[:30]}...")
+    if payloadlen > maxlen:
+        smallestLSB = core.min_lsb_for_payload(payloadlen)
+        print(f"(⚠️) Your payload is too large for the current image!")
+        print(f"(📦) {payloadlen} > (🖼️) {maxlen}")
+        print(f"(💡) You can increase the LSB per Byte, currently set to {core.lsb_per_byte}")
+        print(f"(⚠️) This will significantly increase detectability.")
+        print(f"(⚠️) Anything above 2 is NOT recommended!")
+        print(f"(⚠️) You'll need an LSB per byte of {smallestLSB}")
 
-    core.fill_with_data(payload, bit_seed)
+        if smallestLSB > 2:
+            print(f"(⚠️❌) Increasing above 2 makes steganography much easier to detect with the naked eye!")
+            if not Prompt.bool("(⚠️❌) Are you sure you want to do this? You could use a bigger or multiple images instead.", False):
+                return
+        core.lsb_per_byte = Prompt.num("Do you want to increase the LSB per byte?", smallestLSB, smallestLSB, 8)
+        core._get_all_lsb()
+
+
+    print("Payload built, encrypting...")
+    encrypted_payload = PayloadCrypto.encrypt_payload(password, payload)
+    print(f"Encrypted payload length: {len(encrypted_payload)} bytes")
+
+    core.embed_payload(encrypted_payload, bit_seed)
     output_path = Prompt.string("Enter output image path", "out.png")
     core.save_image(output_path)
 
-def decrypt_flow(core: StegCore, password: str, bit_seed: int):
+def decrypt_flow(core: StegCore, password: bytes, bit_seed: bytes):
     print("\n[ Decrypt Mode ]")
-    extracted_payload = core.extract_data_from_image(bit_seed, password)
+    encrypted_payload = core.extract_payload(bit_seed, password)
+    
     print("Decrypting payload")
-    decrypted_payload = Encryption.decrypt_bytes(password, extracted_payload)
+    decrypted_payload = PayloadCrypto.decrypt_payload(password, encrypted_payload)
 
-    print("Parsing payload")
-    file_ext, file_data = StegCore.parse_payload(decrypted_payload)
+    parser = PayloadParser(decrypted_payload)
+    files = parser.parse()  
+
+    for i, (data, ext) in enumerate(files):
+        print(f"\nFile {i+1}: Extension: {ext}, Size: {len(data)} bytes")
+        save_file = True
+        show_output = False
+
+        if ext == '.txt' or ext == '':
+            save_file = Prompt.bool("Save the output to a file?", default=True)
+            if not save_file:
+                show_output = True
+
+        if save_file:
+            out_name = Prompt.string("Where should the file be saved?", f"output_{i}{ext}")
+            with open(out_name, "wb") as f:
+                f.write(data)
+            print(f"(✅) Saved extracted output to {out_name}")
+
+        if show_output:
+            try:
+                print("(✅) Extracted Text:\n", data.decode('utf-8'))
+            except Exception as e:
+                print("Could not decode text:", e)
 
 
-    save_file = True
-    show_output = False
-
-    if file_ext == "txt" or file_ext == "None":
-        save_file = Prompt.bool("Save the output to a file?", default=True)
-        if not save_file:
-            show_output = True
-
-    if save_file:
-        file_ext = file_ext if not file_ext == "None" else ""
-        output_path = Prompt.string("Where should the file be saved?", f"output.{file_ext}")
-        with open(output_path, "wb") as f:
-            f.write(file_data)
-        print(f"(✅) Saved extracted output to {output_path}")
-
-    if show_output:
-        print("(✅) Extracted Text:\n", file_data)
-
-
-def obfuscate_flow(core: StegCore, password: str, bit_seed: int):
+def obfuscate_flow(core: StegCore, password: bytes, bit_seed: bytes):
     print("\n[ Obfuscate Mode ]")
     encrypted_len = len(core.extract_text_from_image(bit_seed))
 
@@ -128,8 +156,9 @@ def main():
         location_pin = password
 
     bit_seed = Encryption.derive_bit_seed(location_pin)
-    if bit_seed == "":
+    if not bit_seed:
         print('Bit seed is empty, Secrets will be "hidden" left-to-right along the image.')
+
 
 
     mode = input("Choose mode - Encrypt (E) / Decrypt (D) / Obfuscate (O): ").strip().lower()

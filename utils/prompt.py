@@ -75,10 +75,10 @@ class Prompt:
                 if Prompt.bool("Do you want to enter a new password? or keep it empty", True):
                     continue
                 else: 
-                    return ''
+                    return b''
     
     @staticmethod
-    def _check_password(password: str, paranoia: bool = False) -> None:
+    def _check_password(password: str, paranoia: bool = False) -> list[str]:
         warnings = []
 
         # Minimum length warnings

@@ -6,9 +6,9 @@ import hashlib
 
 class Encryption:
     @staticmethod
-    def derive_bit_seed(source: bytes) -> int:  
-        return int.from_bytes(hashlib.sha256(source).digest(), 'big')
-    
+    def derive_bit_seed(source: bytes) -> bytes:
+        return hashlib.sha256(source).digest()
+
     @staticmethod
     def get_checksum(source: bytes) -> int:
         return hashlib.sha256(source).digest()

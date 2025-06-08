@@ -7,8 +7,7 @@ class Tools:
         if '.' not in file_name:
             return ""  # no extension
 
-        extensions = file_name.split('.', 1)[1]
-
+        extensions = file_name[file_name.find('.'):]  
         return extensions
     
     @staticmethod
