@@ -1,12 +1,11 @@
 from PIL import Image
 
-from core.stego import StegCore
-from core.crypto import Encryption
-from core.payload import PayloadBuilder, PayloadParser, PayloadCrypto
+from core import StegFactory, StegCore
+from crypto import Encryption, PayloadBuilder, PayloadCrypto, PayloadParser
 
-from utils.tools import Tools
-from utils.prompt import Prompt
-
+from library import File, Prompt
+from utils import cli
+import 
 import os
 
 
@@ -34,12 +33,12 @@ def encrypt_flow(core: StegCore, password: bytes, bit_seed: bytes):
 
         if use_file:
             file_path = input("Enter path to the file to embed: ").strip()
-            raw_data = Tools.read_file(file_path)
+            raw_data = File.read_file(file_path)
             if not raw_data:
                 print("File doesn't exist or path is wrong. Remember to add filetype")
                 continue
 
-            file_ext = Tools.extract_extension(file_path)
+            file_ext = File.extract_extension(file_path)
             if file_ext.count('.') > 1:
                 print("Multiple Extensions found! This is correct in some cases")
                 print(f"Found: {file_ext}")
@@ -52,15 +51,13 @@ def encrypt_flow(core: StegCore, password: bytes, bit_seed: bytes):
                 file_ext = ".None"  # Lets hope no one uses the .none filetype
 
             pb.add_file(raw_data, file_ext)
-            if Prompt.bool("Do you want to add more files, might break idk [BETA]", False):
-                continue
-            
-            break
-
         else:
             text_data = input("Enter your secret message: ").encode('utf-8')
             pb.add_file(text_data, '.txt')
-            break
+
+        if Prompt.bool("Do you want to add more files", False):
+            continue
+        break
 
     payload = pb.build()
     payloadlen = len(payload)
@@ -81,6 +78,7 @@ def encrypt_flow(core: StegCore, password: bytes, bit_seed: bytes):
                 return
         core.lsb_per_byte = Prompt.num("Do you want to increase the LSB per byte?", smallestLSB, smallestLSB, 8)
         core._get_all_lsb()
+        get_image_info(core)
 
 
     print("Payload built, encrypting...")
@@ -112,9 +110,8 @@ def decrypt_flow(core: StegCore, password: bytes, bit_seed: bytes):
             ext = ""
 
         if ext == '.txt':
-            save_file = Prompt.bool("Save the output to a file? or print it", default=True)
-            if not save_file:
-                show_output = True
+            show_output = Prompt.bool("Show output in console?", default=True)
+            save_file = Prompt.bool("Also save to file?", default=True)
 
         if save_file:
             out_name = Prompt.string("Where should the file be saved?", f"output_{i}{ext}")
@@ -146,40 +143,45 @@ def obfuscate_flow(core: StegCore, password: bytes, bit_seed: bytes):
     
 
 def main():
-    display_intro()
-    paranoia_mode = Prompt.bool("Enable Paranoia mode (separate passwords)?", default=False)
-
-    image_path = input("Enter image filename (with extension): ").strip()
-    if not os.path.exists(image_path):
-        print("❌ File not found.")
-        return
-
-    image = Image.open(image_path)
-    core = StegCore(image)
-    get_image_info(core)
-    print("\n")
-
-    password = Prompt.password("Enter your encryption password: ")
-    if paranoia_mode:
-        location_pin = Prompt.password("Enter a separate password for bit locations: ")
+    import sys
+    if len(sys.argv) > 1:
+        print(sys.argv)
+        cli()
     else:
-        location_pin = password
+        display_intro()
+        paranoia_mode = Prompt.bool("Enable Paranoia mode (separate passwords)?", default=False)
 
-    bit_seed = Encryption.derive_bit_seed(location_pin)
-    if not bit_seed:
-        print('Bit seed is empty, Secrets will be "hidden" left-to-right along the image.')
+        image_path = input("Enter image filename (with extension): ").strip()
+        if not os.path.exists(image_path):
+            print("❌ File not found.")
+            return
+
+        core = StegFactory.load_stego_handler(image_path)
+
+        get_image_info(core)
+        print("\n")
+
+        password = Prompt.password("Enter your encryption password: ")
+        if paranoia_mode:
+            location_pin = Prompt.password("Enter a separate password for bit locations: ")
+        else:
+            location_pin = password
+
+        bit_seed = Encryption.derive_bit_seed(location_pin)
+        if not bit_seed:
+            print('Bit seed is empty, Secrets will be "hidden" left-to-right along the image.')
 
 
 
-    mode = input("Choose mode - Encrypt (E) / Decrypt (D) / Obfuscate (O): ").strip().lower()
-    if mode.startswith("e"):
-        encrypt_flow(core, password, bit_seed)
-    elif mode.startswith("d"):
-        decrypt_flow(core, password, bit_seed)
-    elif mode.startswith("o"):
-        obfuscate_flow(core, password, bit_seed)
-    else:
-        print("❌ Invalid option selected.")
+        mode = input("Choose mode - Encrypt (E) / Decrypt (D) / Obfuscate (O): ").strip().lower()
+        if mode.startswith("e"):
+            encrypt_flow(core, password, bit_seed)
+        elif mode.startswith("d"):
+            decrypt_flow(core, password, bit_seed)
+        elif mode.startswith("o"):
+            obfuscate_flow(core, password, bit_seed)
+        else:
+            print("❌ Invalid option selected.")
 
 if __name__ == "__main__":
     main()
