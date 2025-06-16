@@ -1,8 +1,7 @@
-import os
-
 class File:
     @staticmethod
     def extract_extension(file_path, last_only=False):
+        import os
         file_name = os.path.basename(file_path)
         dot_pos = file_name.find('.')
         if dot_pos == -1:
@@ -17,6 +16,7 @@ class File:
     
     @staticmethod
     def read_file(file_path):
+        import os
         if not os.path.exists(file_path):
             return None
         with open(file_path, "rb") as f:    

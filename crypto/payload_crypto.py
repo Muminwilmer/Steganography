@@ -1,9 +1,8 @@
-from crypto.encryption import Encryption 
-
 class PayloadCrypto:
 
     @staticmethod
     def encrypt_payload(password: bytes, data: bytes) -> bytes:
+        from crypto import Encryption 
         """
         Encrypts the payload in two steps:
 
@@ -38,6 +37,7 @@ class PayloadCrypto:
 
     @staticmethod
     def decrypt_payload(password: bytes, encrypted_payload: bytes, partial: bool = False) -> bytes:
+        from crypto import Encryption 
         """
         Decrypts the payload encrypted by encrypt_payload.
 

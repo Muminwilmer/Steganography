@@ -1,12 +1,20 @@
-from PIL import Image
-
 from core import StegFactory, StegCore
 from crypto import Encryption, PayloadBuilder, PayloadCrypto, PayloadParser
 
-from library import File, Prompt
-from utils import cli
-import 
+from utils import File, Prompt
+from input import cli
+
 import os
+
+
+
+
+
+
+# mutiple files break in cli btw
+
+
+
 
 
 
@@ -87,7 +95,7 @@ def encrypt_flow(core: StegCore, password: bytes, bit_seed: bytes):
 
     core.embed_payload(encrypted_payload, bit_seed)
     output_path = Prompt.string("Enter output image path", "out.png")
-    core.save_image(output_path)
+    core.save_file(output_path)
 
 def decrypt_flow(core: StegCore, password: bytes, bit_seed: bytes):
     print("\n[ Decrypt Mode ]")
